@@ -111,10 +111,9 @@
 
 <script>
   // ============================================
-  // تنظیمات
+  // آدرس Apps Script
   // ============================================
-  // این رو بعداً با آدرس Apps Script خودت عوض کن
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxwAE6XM9SqL90eBJhvbVIyaSsmY7TbA_AaLFovzYQnBIqdSIRwA-IK3gap794r3JZo/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbycxbwA6XM9Sql9QeBJhvblYiaSsmY7TbA_AaLFovzQnBIgdSIRwA-IK3gap794r3JZo/exec";
 
   let orderCodes = [];
   let couriers = [];
@@ -189,9 +188,6 @@
     osc.start(now); osc.stop(now + 0.5);
   }
 
-  // ============================================
-  // شروع
-  // ============================================
   window.addEventListener('load', function() {
     loadCouriers();
     loadFaceModels();
@@ -214,16 +210,16 @@
   }
 
   function loadCouriers() {
-  const callbackName = 'jsonpCallback_' + Date.now();
-  window[callbackName] = function(data) {
-    couriers = data;
-    delete window[callbackName];
-    document.body.removeChild(script);
-  };
-  const script = document.createElement('script');
-  script.src = APPS_SCRIPT_URL + '?action=getCouriers&callback=' + callbackName;
-  document.body.appendChild(script);
-}
+    const callbackName = 'jsonpCb_' + Date.now();
+    window[callbackName] = function(data) {
+      couriers = data;
+      delete window[callbackName];
+      if (script && script.parentNode) document.body.removeChild(script);
+    };
+    const script = document.createElement('script');
+    script.src = APPS_SCRIPT_URL + '?action=getCouriers&callback=' + callbackName;
+    document.body.appendChild(script);
+  }
 
   function loadFaceModels() {
     const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
@@ -237,9 +233,6 @@
     }).catch(function(err) { console.error(err); });
   }
 
-  // ============================================
-  // اسکن بارکد
-  // ============================================
   const barcodeInput = document.getElementById('barcodeInput');
   barcodeInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
@@ -283,9 +276,6 @@
     list.innerHTML = orderCodes.map(c => '<span class="order-item">' + c + '</span>').join('');
   }
 
-  // ============================================
-  // تشخیص چهره
-  // ============================================
   function startFaceDetection() {
     document.getElementById('step1').classList.add('hidden');
     document.getElementById('step2').classList.remove('hidden');
@@ -405,9 +395,6 @@
     });
   }
 
-  // ============================================
-  // چهره تشخیص داده شد
-  // ============================================
   function onFaceMatched(courier, video) {
     playFaceSuccess();
 
@@ -427,28 +414,27 @@
     canvas.getContext('2d').drawImage(video, 0, 0);
     const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-   fetch(APPS_SCRIPT_URL, {
-  method: 'POST',
-  mode: 'no-cors',
-  headers: { 'Content-Type': 'text/plain' },
-  body: JSON.stringify({
-    action: 'submitOrder',
-    orders: orderCodes.join(','),
-    courier: courier.code,
-    photo: photoBase64
-  })
-})
-.then(() => {
-  alert('ثبت شد (' + orderCodes.length + ' سفارش)\nسفیر: ' + courier.name);
-  location.reload();
-})
-.catch(err => {
-  alert('خطا: ' + err.message);
-  backToMain();
-});
-  // ============================================
-  // ثبت سفیر جدید
-  // ============================================
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'submitOrder',
+        orders: orderCodes.join(','),
+        courier: courier.code,
+        photo: photoBase64
+      })
+    })
+    .then(() => {
+      alert('ثبت شد (' + orderCodes.length + ' سفارش)\nسفیر: ' + courier.name);
+      location.reload();
+    })
+    .catch(err => {
+      alert('خطا: ' + err.message);
+      backToMain();
+    });
+  }
+
   function showRegisterCourier() {
     courierPhotos = [];
     document.getElementById('slot0').innerHTML = 'عکس ۱';
@@ -521,28 +507,28 @@
     document.getElementById('submitCourierBtn').disabled = true;
     document.getElementById('submitCourierBtn').textContent = 'در حال ثبت...';
 
-   fetch(APPS_SCRIPT_URL, {
-  method: 'POST',
-  mode: 'no-cors',
-  headers: { 'Content-Type': 'text/plain' },
-  body: JSON.stringify({
-    action: 'registerCourier',
-    code: code,
-    name: name,
-    phone: phone,
-    photos: courierPhotos
-  })
-})
-.then(() => {
-  alert('سفیر با موفقیت ثبت شد');
-  loadCouriers();
-  location.reload();
-})
-.catch(err => {
-  alert('خطا: ' + err.message);
-  document.getElementById('submitCourierBtn').disabled = false;
-  document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
-});
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'registerCourier',
+        code: code,
+        name: name,
+        phone: phone,
+        photos: courierPhotos
+      })
+    })
+    .then(() => {
+      alert('سفیر با موفقیت ثبت شد');
+      loadCouriers();
+      location.reload();
+    })
+    .catch(err => {
+      alert('خطا: ' + err.message);
+      document.getElementById('submitCourierBtn').disabled = false;
+      document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
+    });
   }
 
   function backToMain() {
