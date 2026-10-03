@@ -214,11 +214,16 @@
   }
 
   function loadCouriers() {
-    fetch(APPS_SCRIPT_URL + '?action=getCouriers')
-      .then(r => r.json())
-      .then(data => { couriers = data; })
-      .catch(err => console.error('خطا در بارگذاری سفیرها:', err));
-  }
+  const callbackName = 'jsonpCallback_' + Date.now();
+  window[callbackName] = function(data) {
+    couriers = data;
+    delete window[callbackName];
+    document.body.removeChild(script);
+  };
+  const script = document.createElement('script');
+  script.src = APPS_SCRIPT_URL + '?action=getCouriers&callback=' + callbackName;
+  document.body.appendChild(script);
+}
 
   function loadFaceModels() {
     const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
@@ -422,32 +427,25 @@
     canvas.getContext('2d').drawImage(video, 0, 0);
     const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'submitOrder',
-        orders: orderCodes.join(','),
-        courier: courier.code,
-        photo: photoBase64
-      })
-    })
-    .then(r => r.json())
-    .then(res => {
-      if (res.success) {
-        alert('ثبت شد (' + res.count + ' سفارش)\nسفیر: ' + res.courierName);
-        location.reload();
-      } else {
-        alert(res.message);
-        backToMain();
-      }
-    })
-    .catch(err => {
-      alert('خطا: ' + err.message);
-      backToMain();
-    });
-  }
-
+   fetch(APPS_SCRIPT_URL, {
+  method: 'POST',
+  mode: 'no-cors',
+  headers: { 'Content-Type': 'text/plain' },
+  body: JSON.stringify({
+    action: 'submitOrder',
+    orders: orderCodes.join(','),
+    courier: courier.code,
+    photo: photoBase64
+  })
+})
+.then(() => {
+  alert('ثبت شد (' + orderCodes.length + ' سفارش)\nسفیر: ' + courier.name);
+  location.reload();
+})
+.catch(err => {
+  alert('خطا: ' + err.message);
+  backToMain();
+});
   // ============================================
   // ثبت سفیر جدید
   // ============================================
@@ -523,34 +521,28 @@
     document.getElementById('submitCourierBtn').disabled = true;
     document.getElementById('submitCourierBtn').textContent = 'در حال ثبت...';
 
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'registerCourier',
-        code: code,
-        name: name,
-        phone: phone,
-        photos: courierPhotos
-      })
-    })
-    .then(r => r.json())
-    .then(res => {
-      if (res.success) {
-        alert(res.message);
-        loadCouriers();
-        location.reload();
-      } else {
-        alert(res.message);
-        document.getElementById('submitCourierBtn').disabled = false;
-        document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
-      }
-    })
-    .catch(err => {
-      alert('خطا: ' + err.message);
-      document.getElementById('submitCourierBtn').disabled = false;
-      document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
-    });
+   fetch(APPS_SCRIPT_URL, {
+  method: 'POST',
+  mode: 'no-cors',
+  headers: { 'Content-Type': 'text/plain' },
+  body: JSON.stringify({
+    action: 'registerCourier',
+    code: code,
+    name: name,
+    phone: phone,
+    photos: courierPhotos
+  })
+})
+.then(() => {
+  alert('سفیر با موفقیت ثبت شد');
+  loadCouriers();
+  location.reload();
+})
+.catch(err => {
+  alert('خطا: ' + err.message);
+  document.getElementById('submitCourierBtn').disabled = false;
+  document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
+});
   }
 
   function backToMain() {
