@@ -110,9 +110,6 @@
 </div>
 
 <script>
-  // ============================================
-  // آدرس Apps Script
-  // ============================================
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbycxbwA6XM9Sql9QeBJhvblYiaSsmY7TbA_AaLFovzQnBIgdSIRwA-IK3gap794r3JZo/exec";
 
   let orderCodes = [];
@@ -211,13 +208,19 @@
 
   function loadCouriers() {
     const callbackName = 'jsonpCb_' + Date.now();
+    const script = document.createElement('script');
+
     window[callbackName] = function(data) {
       couriers = data;
+      console.log('سفیرها لود شدند:', couriers.length);
       delete window[callbackName];
       if (script && script.parentNode) document.body.removeChild(script);
     };
-    const script = document.createElement('script');
+
     script.src = APPS_SCRIPT_URL + '?action=getCouriers&callback=' + callbackName;
+    script.onerror = function() {
+      console.error('خطا در بارگذاری سفیرها');
+    };
     document.body.appendChild(script);
   }
 
@@ -414,20 +417,30 @@
     canvas.getContext('2d').drawImage(video, 0, 0);
     const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({
+      action: 'submitOrder',
+      orders: orderCodes.join(','),
+      courier: courier.code,
+      photo: photoBase64
+    }));
+
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'submitOrder',
-        orders: orderCodes.join(','),
-        courier: courier.code,
-        photo: photoBase64
-      })
+      body: formData
     })
-    .then(() => {
-      alert('ثبت شد (' + orderCodes.length + ' سفارش)\nسفیر: ' + courier.name);
-      location.reload();
+    .then(r => r.text())
+    .then(text => {
+      console.log('پاسخ سرور:', text);
+      let res;
+      try { res = JSON.parse(text); } catch (e) { res = { success: true }; }
+      if (res.success) {
+        alert('ثبت شد (' + orderCodes.length + ' سفارش)\nسفیر: ' + courier.name);
+        location.reload();
+      } else {
+        alert(res.message || 'خطا در ثبت');
+        backToMain();
+      }
     })
     .catch(err => {
       alert('خطا: ' + err.message);
@@ -507,22 +520,33 @@
     document.getElementById('submitCourierBtn').disabled = true;
     document.getElementById('submitCourierBtn').textContent = 'در حال ثبت...';
 
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify({
+      action: 'registerCourier',
+      code: code,
+      name: name,
+      phone: phone,
+      photos: courierPhotos
+    }));
+
     fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'registerCourier',
-        code: code,
-        name: name,
-        phone: phone,
-        photos: courierPhotos
-      })
+      body: formData
     })
-    .then(() => {
-      alert('سفیر با موفقیت ثبت شد');
-      loadCouriers();
-      location.reload();
+    .then(r => r.text())
+    .then(text => {
+      console.log('پاسخ سرور:', text);
+      let res;
+      try { res = JSON.parse(text); } catch (e) { res = { success: true }; }
+      if (res.success) {
+        alert('سفیر با موفقیت ثبت شد');
+        loadCouriers();
+        location.reload();
+      } else {
+        alert(res.message || 'خطا در ثبت');
+        document.getElementById('submitCourierBtn').disabled = false;
+        document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
+      }
     })
     .catch(err => {
       alert('خطا: ' + err.message);
