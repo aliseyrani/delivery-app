@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سیستم ثبت سفارش پیک</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+  * { box-sizing: border-box; font-family: Tahoma, sans-serif; }
+  body { margin: 0; padding: 20px; background: #f0f2f5; }
+  .container { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  h2 { text-align: center; color: #333; margin-top: 0; }
+  label { display: block; margin: 12px 0 6px; font-weight: bold; color: #444; }
+  input, button { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; }
+  button { background: #1a73e8; color: white; border: none; cursor: pointer; margin-top: 16px; font-weight: bold; }
+  button:hover { background: #1557b0; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  button.secondary { background: #6c757d; }
+  button.secondary:hover { background: #495057; }
+  button.success { background: #28a745; }
+  #orderList { background: #f8f9fa; border-radius: 8px; padding: 10px; min-height: 50px; margin-top: 8px; }
+  .order-item { display: inline-block; background: #e3f2fd; color: #0d47a1; padding: 4px 10px; border-radius: 20px; margin: 3px; font-size: 13px; }
+  #statusMsg { margin-top: 15px; padding: 10px; border-radius: 8px; text-align: center; display: none; }
+  .success { background: #d4edda; color: #155724; display: block !important; }
+  .error { background: #f8d7da; color: #721c24; display: block !important; }
+  .info { background: #d1ecf1; color: #0c5460; display: block !important; }
+  #video, #canvas, #videoReg { width: 100%; border-radius: 8px; background: #000; }
+  .hidden { display: none !important; }
+  .badge { background: #ff9800; color: white; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
+  .big-msg { text-align: center; font-size: 20px; font-weight: bold; color: #1a73e8; margin: 20px 0; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .top-bar button { width: auto; margin: 0; padding: 8px 16px; font-size: 14px; }
+  .matched-info { background: #e8f5e9; padding: 12px; border-radius: 8px; text-align: center; margin: 10px 0; }
+  .matched-info strong { font-size: 18px; color: #2e7d32; }
+  .progress { text-align: center; color: #666; margin: 10px 0; }
+  #loadingModels { text-align: center; padding: 30px; color: #1a73e8; font-weight: bold; }
+  .photo-slots { display: flex; gap: 8px; margin: 10px 0; }
+  .photo-slot { flex: 1; aspect-ratio: 1; border: 2px dashed #bbb; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px; text-align: center; background: #fafafa; overflow: hidden; }
+  .photo-slot.filled { border-style: solid; border-color: #28a745; background: #e8f5e9; color: #2e7d32; font-weight: bold; }
+  .photo-slot img { width: 100%; height: 100%; object-fit: cover; }
+  .step-hint { text-align: center; padding: 8px; background: #fff3cd; border-radius: 8px; margin: 8px 0; color: #856404; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="top-bar">
+    <span style="font-weight:bold; color:#555;">سیستم پیک</span>
+    <button class="secondary" onclick="showRegisterCourier()">ثبت سفیر جدید</button>
+  </div>
+
+  <div id="step1">
+    <h2>اسکن سفارش‌ها</h2>
+    <label>بارکد سفارش را اسکن کنید:</label>
+    <input type="text" id="barcodeInput" placeholder="منتظر اسکن..." autofocus autocomplete="off">
+    <div id="orderList">
+      <em style="color:#888; font-size:13px;">هنوز سفارشی اسکن نشده</em>
+    </div>
+    <label>برای اتمام، بارکد <span class="badge">finish</span> را اسکن کنید</label>
+    <div id="statusMsg"></div>
+  </div>
+
+  <div id="step2" class="hidden">
+    <div id="loadingModels">در حال بارگذاری مدل‌های تشخیص چهره...</div>
+    <div id="faceCamera" class="hidden">
+      <h2>لطفاً روبروی دوربین بایستید</h2>
+      <div class="big-msg" id="faceStatusMsg">در حال جستجوی چهره...</div>
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas" class="hidden"></canvas>
+      <div class="progress" id="detectionProgress"></div>
+    </div>
+  </div>
+
+  <div id="step3" class="hidden">
+    <h2>چهره شناسایی شد</h2>
+    <div class="matched-info">
+      <div>سفیر:</div>
+      <strong id="matchedName"></strong>
+      <div id="matchedCode" style="color:#666; margin-top:5px;"></div>
+    </div>
+    <p style="text-align:center; color:#666;">در حال ثبت نهایی...</p>
+  </div>
+
+  <div id="registerPage" class="hidden">
+    <h2>ثبت سفیر جدید</h2>
+    <label>کد سفیر:</label>
+    <input type="text" id="newCode" placeholder="مثلاً 005" autocomplete="off">
+    <label>نام و نام خانوادگی:</label>
+    <input type="text" id="newName" placeholder="مثلاً علی رضایی">
+    <label>شماره تماس:</label>
+    <input type="text" id="newPhone" placeholder="مثلاً 09121234567">
+
+    <label>عکس‌های سفیر (۳ عکس اجباری):</label>
+    <div class="step-hint" id="photoHint">برای عکس اول، روبروی دوربین بایستید</div>
+    <video id="videoReg" autoplay playsinline muted></video>
+    <canvas id="canvasReg" class="hidden"></canvas>
+
+    <div class="photo-slots">
+      <div class="photo-slot" id="slot0">عکس ۱</div>
+      <div class="photo-slot" id="slot1">عکس ۲</div>
+      <div class="photo-slot" id="slot2">عکس ۳</div>
+    </div>
+
+    <button class="success" id="takePhotoBtn" onclick="takeCourierPhoto()">گرفتن عکس ۱</button>
+    <button class="success hidden" id="submitCourierBtn" onclick="registerCourier()" disabled>ثبت نهایی سفیر</button>
+    <button class="secondary" onclick="backToMain()">بازگشت</button>
+    <div id="regStatus"></div>
+  </div>
+
+</div>
+
+<script>
+  // ============================================
+  // تنظیمات
+  // ============================================
+  // این رو بعداً با آدرس Apps Script خودت عوض کن
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/آیدی_خودت/exec";
+
+  let orderCodes = [];
+  let couriers = [];
+  let modelsLoaded = false;
+  let detectionInterval = null;
+  let streamMain = null;
+  let streamReg = null;
+  let courierPhotos = [];
+  let audioCtx = null;
+  let masterGain = null;
+
+  function initAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 1.0;
+        masterGain.connect(audioCtx.destination);
+      } catch (e) { console.warn('AudioContext پشتیبانی نمی‌شود'); }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function playScanBeep() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1500, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(1.0, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    osc.connect(gain); gain.connect(masterGain);
+    osc.start(now); osc.stop(now + 0.2);
+  }
+
+  function playFaceSuccess() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const notes = [
+      { freq: 523.25, start: 0.00, dur: 0.18, vol: 0.9 },
+      { freq: 659.25, start: 0.14, dur: 0.18, vol: 0.9 },
+      { freq: 783.99, start: 0.28, dur: 0.20, vol: 0.95 },
+      { freq: 1046.50, start: 0.44, dur: 0.65, vol: 1.0 }
+    ];
+    notes.forEach(n => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(n.freq, now + n.start);
+      gain.gain.setValueAtTime(0.0001, now + n.start);
+      gain.gain.exponentialRampToValueAtTime(n.vol, now + n.start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+      osc.connect(gain); gain.connect(masterGain);
+      osc.start(now + n.start); osc.stop(now + n.start + n.dur + 0.05);
+    });
+  }
+
+  function playErrorBeep() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(150, now + 0.4);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.7, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+    osc.connect(gain); gain.connect(masterGain);
+    osc.start(now); osc.stop(now + 0.5);
+  }
+
+  // ============================================
+  // شروع
+  // ============================================
+  window.addEventListener('load', function() {
+    loadCouriers();
+    loadFaceModels();
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('keydown', initAudio, { once: true });
+    forceFocusBarcode();
+  });
+
+  function forceFocusBarcode() {
+    setInterval(function() {
+      const step1 = document.getElementById('step1');
+      if (step1.classList.contains('hidden')) return;
+      if (document.hidden) return;
+      const barcodeInput = document.getElementById('barcodeInput');
+      const active = document.activeElement;
+      if (active === document.body || active === null || active.tagName === 'BODY') {
+        barcodeInput.focus();
+      }
+    }, 500);
+  }
+
+  function loadCouriers() {
+    fetch(APPS_SCRIPT_URL + '?action=getCouriers')
+      .then(r => r.json())
+      .then(data => { couriers = data; })
+      .catch(err => console.error('خطا در بارگذاری سفیرها:', err));
+  }
+
+  function loadFaceModels() {
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+    ]).then(function() {
+      modelsLoaded = true;
+      console.log('مدل‌ها لود شدند');
+    }).catch(function(err) { console.error(err); });
+  }
+
+  // ============================================
+  // اسکن بارکد
+  // ============================================
+  const barcodeInput = document.getElementById('barcodeInput');
+  barcodeInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = barcodeInput.value.trim();
+      barcodeInput.value = '';
+      if (!val) return;
+
+      if (val.toLowerCase() === 'finish') {
+        if (orderCodes.length === 0) {
+          showStatus('هیچ سفارشی اسکن نشده!', 'error');
+          playErrorBeep();
+          return;
+        }
+        startFaceDetection();
+      } else {
+        orderCodes.push(val);
+        renderOrders();
+        playScanBeep();
+        showStatus('سفارش اضافه شد: ' + val, 'info');
+        barcodeInput.focus();
+      }
+    }
+  });
+
+  barcodeInput.addEventListener('blur', function() {
+    setTimeout(function() {
+      const step1 = document.getElementById('step1');
+      if (!step1.classList.contains('hidden') && !document.hidden) {
+        barcodeInput.focus();
+      }
+    }, 100);
+  });
+
+  function renderOrders() {
+    const list = document.getElementById('orderList');
+    if (orderCodes.length === 0) {
+      list.innerHTML = '<em style="color:#888; font-size:13px;">هنوز سفارشی اسکن نشده</em>';
+      return;
+    }
+    list.innerHTML = orderCodes.map(c => '<span class="order-item">' + c + '</span>').join('');
+  }
+
+  // ============================================
+  // تشخیص چهره
+  // ============================================
+  function startFaceDetection() {
+    document.getElementById('step1').classList.add('hidden');
+    document.getElementById('step2').classList.remove('hidden');
+
+    if (!modelsLoaded) {
+      document.getElementById('loadingModels').textContent = 'مدل‌ها آماده نیستند، صبر کنید...';
+      setTimeout(startFaceDetection, 1500);
+      return;
+    }
+
+    const couriersWithPhoto = couriers.filter(c => c.photoUrls && c.photoUrls.length > 10);
+    if (couriersWithPhoto.length === 0) {
+      alert('هیچ سفیر با عکسی وجود ندارد! اول سفیر ثبت کنید.');
+      backToMain();
+      return;
+    }
+
+    document.getElementById('loadingModels').classList.add('hidden');
+    document.getElementById('faceCamera').classList.remove('hidden');
+
+    const video = document.getElementById('video');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      .then(function(s) {
+        streamMain = s;
+        video.srcObject = s;
+        video.onloadedmetadata = function() {
+          startRecognition(video, couriersWithPhoto);
+        };
+      })
+      .catch(function(err) {
+        alert('دسترسی به دوربین ممکن نشد: ' + err.message);
+        backToMain();
+      });
+  }
+
+  async function startRecognition(video, couriersWithPhoto) {
+    const statusMsg = document.getElementById('faceStatusMsg');
+    const progress = document.getElementById('detectionProgress');
+
+    try {
+      statusMsg.textContent = 'در حال آماده‌سازی اطلاعات سفیرها...';
+      const labeledDescriptors = [];
+
+      for (const c of couriersWithPhoto) {
+        const urls = c.photoUrls.split(',').map(u => u.trim()).filter(u => u);
+        const descriptors = [];
+        for (const url of urls) {
+          try {
+            const img = await loadImage(url);
+            const det = await faceapi
+              .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+              .withFaceLandmarks()
+              .withFaceDescriptor();
+            if (det) descriptors.push(det.descriptor);
+          } catch (e) { console.warn('عکس قابل پردازش نبود'); }
+        }
+        if (descriptors.length > 0) {
+          labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(c.code, descriptors));
+        }
+      }
+
+      if (labeledDescriptors.length === 0) {
+        statusMsg.textContent = 'هیچ چهره‌ای در عکس سفیرها پیدا نشد!';
+        return;
+      }
+
+      const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+      statusMsg.textContent = 'در حال جستجوی چهره...';
+      progress.textContent = 'لطفاً کمی صبر کنید';
+
+      let foundStable = null;
+      let stableCount = 0;
+
+      detectionInterval = setInterval(async function() {
+        if (video.readyState < 2) return;
+
+        const detection = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (detection) {
+          const match = faceMatcher.findBestMatch(detection.descriptor);
+          if (match.label !== 'unknown' && match.distance < 0.55) {
+            if (foundStable === match.label) stableCount++;
+            else { foundStable = match.label; stableCount = 1; }
+            statusMsg.textContent = 'شناسایی شد: ' + match.label + ' (تأیید ' + stableCount + '/3)';
+            if (stableCount >= 3) {
+              clearInterval(detectionInterval);
+              detectionInterval = null;
+              const courier = couriers.find(c => c.code === match.label);
+              onFaceMatched(courier, video);
+            }
+          } else {
+            foundStable = null; stableCount = 0;
+            statusMsg.textContent = 'چهره ناشناخته... دقیق‌تر روبروی دوربین بایستید';
+          }
+        } else {
+          foundStable = null; stableCount = 0;
+          statusMsg.textContent = 'در جستجوی چهره...';
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error(err);
+      statusMsg.textContent = 'خطا: ' + err.message;
+    }
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  // ============================================
+  // چهره تشخیص داده شد
+  // ============================================
+  function onFaceMatched(courier, video) {
+    playFaceSuccess();
+
+    if (streamMain) {
+      streamMain.getTracks().forEach(t => t.stop());
+      streamMain = null;
+    }
+
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.remove('hidden');
+    document.getElementById('matchedName').textContent = courier.name;
+    document.getElementById('matchedCode').textContent = 'کد: ' + courier.code + ' | تلفن: ' + courier.phone;
+
+    const canvas = document.getElementById('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'submitOrder',
+        orders: orderCodes.join(','),
+        courier: courier.code,
+        photo: photoBase64
+      })
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        alert('ثبت شد (' + res.count + ' سفارش)\nسفیر: ' + res.courierName);
+        location.reload();
+      } else {
+        alert(res.message);
+        backToMain();
+      }
+    })
+    .catch(err => {
+      alert('خطا: ' + err.message);
+      backToMain();
+    });
+  }
+
+  // ============================================
+  // ثبت سفیر جدید
+  // ============================================
+  function showRegisterCourier() {
+    courierPhotos = [];
+    document.getElementById('slot0').innerHTML = 'عکس ۱';
+    document.getElementById('slot1').innerHTML = 'عکس ۲';
+    document.getElementById('slot2').innerHTML = 'عکس ۳';
+    document.getElementById('slot0').classList.remove('filled');
+    document.getElementById('slot1').classList.remove('filled');
+    document.getElementById('slot2').classList.remove('filled');
+    document.getElementById('takePhotoBtn').textContent = 'گرفتن عکس ۱';
+    document.getElementById('takePhotoBtn').classList.remove('hidden');
+    document.getElementById('submitCourierBtn').classList.add('hidden');
+    document.getElementById('submitCourierBtn').disabled = true;
+    document.getElementById('photoHint').textContent = 'برای عکس اول، روبروی دوربین بایستید';
+
+    document.getElementById('step1').classList.add('hidden');
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('registerPage').classList.remove('hidden');
+
+    const video = document.getElementById('videoReg');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      .then(function(s) {
+        streamReg = s;
+        video.srcObject = s;
+      })
+      .catch(function(err) {
+        alert('دسترسی به دوربین ممکن نشد: ' + err.message);
+      });
+  }
+
+  function takeCourierPhoto() {
+    const video = document.getElementById('videoReg');
+    const canvas = document.getElementById('canvasReg');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const photoBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+    courierPhotos.push(photoBase64);
+
+    const idx = courierPhotos.length - 1;
+    const slot = document.getElementById('slot' + idx);
+    slot.innerHTML = '<img src="' + photoBase64 + '">';
+    slot.classList.add('filled');
+
+    playScanBeep();
+
+    if (courierPhotos.length < 3) {
+      document.getElementById('takePhotoBtn').textContent = 'گرفتن عکس ' + (courierPhotos.length + 1);
+      const hints = ['', 'عکس دوم: کمی به راست بچرخید', 'عکس سوم: کمی به چپ بچرخید'];
+      document.getElementById('photoHint').textContent = hints[courierPhotos.length] || '';
+    } else {
+      document.getElementById('takePhotoBtn').classList.add('hidden');
+      document.getElementById('submitCourierBtn').classList.remove('hidden');
+      document.getElementById('submitCourierBtn').disabled = false;
+      document.getElementById('photoHint').textContent = 'هر ۳ عکس گرفته شد. حالا ثبت کنید.';
+    }
+  }
+
+  function registerCourier() {
+    const code = document.getElementById('newCode').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const phone = document.getElementById('newPhone').value.trim();
+
+    if (!code || !name || !phone) { alert('همه فیلدها را پر کنید!'); return; }
+    if (courierPhotos.length < 3) { alert('باید ۳ عکس گرفته شود!'); return; }
+
+    if (streamReg) { streamReg.getTracks().forEach(t => t.stop()); streamReg = null; }
+
+    document.getElementById('submitCourierBtn').disabled = true;
+    document.getElementById('submitCourierBtn').textContent = 'در حال ثبت...';
+
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'registerCourier',
+        code: code,
+        name: name,
+        phone: phone,
+        photos: courierPhotos
+      })
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        alert(res.message);
+        loadCouriers();
+        location.reload();
+      } else {
+        alert(res.message);
+        document.getElementById('submitCourierBtn').disabled = false;
+        document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
+      }
+    })
+    .catch(err => {
+      alert('خطا: ' + err.message);
+      document.getElementById('submitCourierBtn').disabled = false;
+      document.getElementById('submitCourierBtn').textContent = 'ثبت نهایی سفیر';
+    });
+  }
+
+  function backToMain() {
+    if (detectionInterval) { clearInterval(detectionInterval); detectionInterval = null; }
+    if (streamMain) { streamMain.getTracks().forEach(t => t.stop()); streamMain = null; }
+    if (streamReg) { streamReg.getTracks().forEach(t => t.stop()); streamReg = null; }
+
+    document.getElementById('step1').classList.remove('hidden');
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('registerPage').classList.add('hidden');
+    document.getElementById('loadingModels').classList.remove('hidden');
+    document.getElementById('faceCamera').classList.add('hidden');
+
+    orderCodes = [];
+    courierPhotos = [];
+    renderOrders();
+    document.getElementById('barcodeInput').focus();
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.className = type;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
+  }
+</script>
+</body>
+</html>
